@@ -16,7 +16,7 @@ const app = express();
 // middleware
 app.use(
   cors({
-    origin: [process.env.CLIENT_DOMAIN],
+    origin: [process.env.CLIENT_DOMAIN, process.env.CLIENT_DASHBOARD_DOMAIN],
     credentials: true,
     optionSuccessStatus: 200,
   })
@@ -51,6 +51,7 @@ async function run() {
   try {
     const db = client.db("cook-db");
     const userColl = db.collection("users");
+    const mealsColl = db.collection("meals");
 
     // CREATE USER (PROTECTED)
     app.post("/users", verifyJWT, async (req, res) => {
@@ -78,7 +79,37 @@ async function run() {
       res.send(result);
     });
 
-    console;
+    // CREATE MEAL (PROTECTED)
+    app.post("/meals", verifyJWT, async (req, res) => {
+      const meal = req.body;
+
+      try {
+        // 1️⃣ Only allow the logged-in user's email
+        if (meal.userEmail !== req.tokenEmail) {
+          return res.status(403).send({ message: "Forbidden!" });
+        }
+
+        // 2️⃣ Add createdAt if not provided
+        meal.createdAt = meal.createdAt ? new Date(meal.createdAt) : new Date();
+
+        // 3️⃣ Insert meal to DB
+        const result = await mealsColl.insertOne(meal);
+
+        res.send(result);
+      } catch (err) {
+        res.status(500).send({ message: "Failed to add meal", error: err });
+      }
+    });
+
+    // GET ALL MEALS (PUBLIC)
+    app.get("/meals", async (req, res) => {
+      try {
+        const meals = await mealsColl.find().toArray();
+        res.send(meals);
+      } catch (err) {
+        res.status(500).send({ message: "Failed to fetch meals", error: err });
+      }
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
