@@ -1,6 +1,8 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const { ObjectId } = require("mongodb");
+
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const admin = require("firebase-admin");
 const port = process.env.PORT || 3000;
@@ -14,13 +16,7 @@ admin.initializeApp({
 
 const app = express();
 // middleware
-app.use(
-  cors({
-    origin: [process.env.CLIENT_DOMAIN, process.env.CLIENT_DASHBOARD_DOMAIN],
-    credentials: true,
-    optionSuccessStatus: 200,
-  })
-);
+app.use(cors());
 app.use(express.json());
 
 // jwt middlewares
@@ -52,6 +48,7 @@ async function run() {
     const db = client.db("cook-db");
     const userColl = db.collection("users");
     const mealsColl = db.collection("meals");
+    const reviewsCollection = db.collection("reviews");
 
     // CREATE USER (PROTECTED)
     app.post("/users", verifyJWT, async (req, res) => {
@@ -109,6 +106,24 @@ async function run() {
       } catch (err) {
         res.status(500).send({ message: "Failed to fetch meals", error: err });
       }
+    });
+
+    // GET SINGLE MEAL (PUBLIC)
+    app.get("/meals/:id", async (req, res) => {
+      const id = req.params.id;
+      const meal = await mealsColl.findOne({ _id: new ObjectId(id) });
+
+      if (!meal) {
+        return res.status(404).send({ message: "Meal not found" });
+      }
+
+      res.send(meal);
+    });
+
+    // get all review
+    app.get("/reviews", async (req, res) => {
+      const result = await reviewsCollection.find().toArray();
+      res.send(result);
     });
 
     // Send a ping to confirm a successful connection
