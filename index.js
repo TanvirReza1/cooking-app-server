@@ -63,6 +63,7 @@ async function run() {
     const favoritesCollection = db.collection("favorites");
     const ordersCollection = db.collection("orders");
     const roleRequestColl = db.collection("roleRequests");
+    const orderRequestsCollection = db.collection("orderRequests");
 
     // CREATE USER (PROTECTED)
     app.post("/users", verifyJWT, async (req, res) => {
@@ -458,6 +459,48 @@ async function run() {
       } catch (err) {
         console.error("/reviews PATCH error:", err);
         res.status(500).send({ message: "Failed to update review" });
+      }
+    });
+
+    // order request
+    app.post("/order-requests", async (req, res) => {
+      try {
+        const orderData = req.body;
+
+        const result = await orderRequestsCollection.insertOne(orderData);
+        res.send(result);
+      } catch (error) {
+        console.error("/order-requests POST error:", error);
+        res.status(500).send({ message: "Server Error" });
+      }
+    });
+
+    // get all order request
+    app.get("/order-requests", async (req, res) => {
+      try {
+        const result = await orderRequestsCollection.find().toArray();
+        res.send(result);
+      } catch (error) {
+        console.error("/order-requests GET error:", error);
+        res.status(500).send({ message: "Server Error" });
+      }
+    });
+
+    // update payment status
+    app.patch("/order-requests/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const { paymentStatus } = req.body;
+
+        const result = await orderRequestsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { paymentStatus } }
+        );
+
+        res.send(result);
+      } catch (error) {
+        console.error("/order-requests/:id PATCH error:", error);
+        res.status(500).send({ message: "Server Error" });
       }
     });
 
