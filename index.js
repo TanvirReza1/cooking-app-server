@@ -60,6 +60,7 @@ async function run() {
     const userColl = db.collection("users");
     const mealsColl = db.collection("meals");
     const reviewsCollection = db.collection("reviews");
+    const orderColl = db.collection("orders");
     const favoritesCollection = db.collection("favorites");
     const ordersCollection = db.collection("orders");
 
@@ -278,6 +279,17 @@ async function run() {
       } catch (err) {
         console.error("/orders POST error:", err);
         res.status(500).send({ message: "Failed to create order", error: err });
+      }
+    });
+
+    // orders route
+    app.post("/orders", async (req, res) => {
+      try {
+        const order = req.body;
+        const result = await orderColl.insertOne(order);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ error: "Failed to place order" });
       }
     });
 
