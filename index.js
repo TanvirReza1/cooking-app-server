@@ -64,10 +64,6 @@ async function run() {
     const ordersCollection = db.collection("orders");
     const roleRequestColl = db.collection("roleRequests");
 
-    // (Optional) create indexes to speed queries
-    // await reviewsCollection.createIndex({ foodId: 1 });
-    // await favoritesCollection.createIndex({ userEmail: 1, mealId: 1 }, { unique: false });
-
     // CREATE USER (PROTECTED)
     app.post("/users", verifyJWT, async (req, res) => {
       try {
@@ -243,24 +239,18 @@ async function run() {
 
     // GET USER'S FAVORITES (Protected)
     // call: GET /favorites?email=user@example.com
-    app.get("/favorites", verifyJWT, async (req, res) => {
-      try {
-        const email = req.query.email;
-        if (!email)
-          return res.status(400).send({ message: "email query required" });
-        if (email !== req.tokenEmail)
-          return res.status(403).send({ message: "Forbidden!" });
+    app.get("/favorites/:email", async (req, res) => {
+      const result = await favoritesCollection
+        .find({ userEmail: req.params.email })
+        .toArray();
+      res.send(result);
+    });
 
-        const result = await favoritesCollection
-          .find({ userEmail: email })
-          .toArray();
-        res.send(result);
-      } catch (err) {
-        console.error("/favorites GET error:", err);
-        res
-          .status(500)
-          .send({ message: "Failed to fetch favorites", error: err });
-      }
+    app.delete("/favorites/:id", async (req, res) => {
+      const result = await favoritesCollection.deleteOne({
+        _id: new ObjectId(req.params.id),
+      });
+      res.send(result);
     });
 
     // CREATE ORDER (Protected)
