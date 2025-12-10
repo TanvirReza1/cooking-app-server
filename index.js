@@ -60,9 +60,9 @@ async function run() {
     const userColl = db.collection("users");
     const mealsColl = db.collection("meals");
     const reviewsCollection = db.collection("reviews");
-    const orderColl = db.collection("orders");
     const favoritesCollection = db.collection("favorites");
     const ordersCollection = db.collection("orders");
+    const roleRequestColl = db.collection("roleRequests");
 
     // (Optional) create indexes to speed queries
     // await reviewsCollection.createIndex({ foodId: 1 });
@@ -282,14 +282,192 @@ async function run() {
       }
     });
 
-    // orders route
-    app.post("/orders", async (req, res) => {
+    // GET all orders for logged-in user
+    app.get("/orders", verifyJWT, async (req, res) => {
       try {
-        const order = req.body;
-        const result = await orderColl.insertOne(order);
+        const email = req.query.email;
+
+        if (!email) {
+          return res.status(400).send({ message: "email is required" });
+        }
+
+        // users can only view their own orders
+        if (email !== req.tokenEmail) {
+          return res.status(403).send({ message: "Forbidden!" });
+        }
+
+        const orders = await ordersCollection
+          .find({ userEmail: email })
+          .sort({ orderTime: -1 })
+          .toArray();
+
+        res.send(orders);
+      } catch (err) {
+        console.error("/orders GET error:", err);
+        res.status(500).send({ message: "Failed to fetch orders" });
+      }
+    });
+
+    // GET user by email (Protected)
+    app.get("/users/:email", verifyJWT, async (req, res) => {
+      try {
+        const email = req.params.email;
+
+        // Security: only allow user to read their own data
+        if (email !== req.tokenEmail) {
+          return res.status(403).send({ message: "Forbidden!" });
+        }
+
+        const user = await userColl.findOne({ email });
+        if (!user) {
+          return res.status(404).send({ message: "User not found" });
+        }
+
+        res.send(user);
+      } catch (err) {
+        console.error("/users/:email GET error:", err);
+        res.status(500).send({ message: "Failed to fetch user", error: err });
+      }
+    });
+
+    // CREATE ROLE REQUEST (Protected)
+    app.post("/role-requests", verifyJWT, async (req, res) => {
+      try {
+        const body = req.body;
+        delete body._id;
+
+        if (!body.userEmail || !body.requestType) {
+          return res.status(400).send({ message: "Missing fields" });
+        }
+
+        if (body.userEmail !== req.tokenEmail) {
+          return res.status(403).send({ message: "Forbidden!" });
+        }
+
+        body.requestTime = new Date();
+        body.requestStatus = "pending";
+
+        const result = await roleRequestColl.insertOne(body);
+        res.send({ success: true, result });
+      } catch (err) {
+        if (err.code === 11000) {
+          return res.status(409).send({
+            success: false,
+            message:
+              "You already submitted a request. Please wait for admin approval.",
+          });
+        }
+
+        console.error("/role-requests POST error:", err);
+        res.status(500).send({ message: "Failed to create role request" });
+      }
+    });
+
+    // GET ALL ROLE REQUESTS — (Admin only)
+    app.get("/role-requests", verifyJWT, async (req, res) => {
+      try {
+        const requests = await roleRequestColl.find().toArray();
+        res.send(requests);
+      } catch (err) {
+        console.error("/role-requests GET error:", err);
+        res
+          .status(500)
+          .send({ message: "Failed to fetch role requests", error: err });
+      }
+    });
+
+    // GET reviews of logged-in user
+    app.get("/user-reviews", verifyJWT, async (req, res) => {
+      try {
+        const email = req.query.email;
+        if (!email)
+          return res.status(400).send({ message: "email is required" });
+
+        // users can only see their own reviews
+        if (email !== req.tokenEmail)
+          return res.status(403).send({ message: "Forbidden!" });
+
+        const result = await reviewsCollection
+          .find({ reviewerEmail: email })
+          .sort({ date: -1 })
+          .toArray();
+
         res.send(result);
-      } catch (error) {
-        res.status(500).send({ error: "Failed to place order" });
+      } catch (err) {
+        console.error("/user-reviews GET error:", err);
+        res.status(500).send({ message: "Failed to fetch user reviews" });
+      }
+    });
+
+    // DELETE REVIEW (Protected)
+    app.delete("/reviews/:id", verifyJWT, async (req, res) => {
+      try {
+        const id = req.params.id;
+
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({ message: "Invalid review id" });
+        }
+
+        const review = await reviewsCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        if (!review) {
+          return res.status(404).send({ message: "Review not found" });
+        }
+
+        // Only the owner can delete
+        if (review.reviewerEmail !== req.tokenEmail) {
+          return res.status(403).send({ message: "Forbidden!" });
+        }
+
+        await reviewsCollection.deleteOne({ _id: new ObjectId(id) });
+
+        res.send({ success: true });
+      } catch (err) {
+        console.error("/reviews DELETE error:", err);
+        res.status(500).send({ message: "Failed to delete review" });
+      }
+    });
+
+    // UPDATE REVIEW (Protected)
+    app.patch("/reviews/:id", verifyJWT, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const { rating, comment } = req.body;
+
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({ message: "Invalid review id" });
+        }
+
+        const review = await reviewsCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        if (!review) {
+          return res.status(404).send({ message: "Review not found" });
+        }
+
+        // Only owner can update
+        if (review.reviewerEmail !== req.tokenEmail) {
+          return res.status(403).send({ message: "Forbidden!" });
+        }
+
+        const updated = await reviewsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          {
+            $set: {
+              rating,
+              comment,
+              date: new Date(),
+            },
+          }
+        );
+
+        res.send({ success: true, updated });
+      } catch (err) {
+        console.error("/reviews PATCH error:", err);
+        res.status(500).send({ message: "Failed to update review" });
       }
     });
 
