@@ -333,7 +333,7 @@ async function run() {
     });
 
     // CREATE ROLE REQUEST (Protected)
-    app.post("/role-requests", verifyJWT, async (req, res) => {
+    app.post("/role-requests", verifyJWT, verifyAdmin, async (req, res) => {
       try {
         const body = req.body;
         delete body._id;
@@ -377,6 +377,82 @@ async function run() {
           .send({ message: "Failed to fetch role requests", error: err });
       }
     });
+
+    // ACCEPT ROLE REQUEST (Admin only)
+    app.patch(
+      "/role-requests/accept/:id",
+      verifyJWT,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const id = req.params.id;
+
+          const request = await roleRequestColl.findOne({
+            _id: new ObjectId(id),
+          });
+          if (!request)
+            return res.status(404).send({ message: "Request not found" });
+
+          // Get user info
+          const user = await userColl.findOne({ email: request.userEmail });
+          if (!user) return res.status(404).send({ message: "User not found" });
+
+          let updateFields = { role: request.requestType };
+
+          // If request type = chef → generate chefId
+          if (request.requestType === "chef") {
+            const chefId = "chef-" + Math.floor(1000 + Math.random() * 9000);
+            updateFields.chefId = chefId;
+          }
+
+          // Update user role + chefId if needed
+          await userColl.updateOne(
+            { email: request.userEmail },
+            { $set: updateFields }
+          );
+
+          // Update request status → approved
+          await roleRequestColl.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { requestStatus: "approved" } }
+          );
+
+          res.send({ success: true, message: "Request Approved!" });
+        } catch (error) {
+          console.error("/role-requests/accept error:", error);
+          res.status(500).send({ message: "Server Error" });
+        }
+      }
+    );
+
+    // REJECT ROLE REQUEST (Admin only)
+    app.patch(
+      "/role-requests/reject/:id",
+      verifyJWT,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const id = req.params.id;
+
+          const request = await roleRequestColl.findOne({
+            _id: new ObjectId(id),
+          });
+          if (!request)
+            return res.status(404).send({ message: "Request not found" });
+
+          // Only change request status
+          await roleRequestColl.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { requestStatus: "rejected" } }
+          );
+
+          res.send({ success: true, message: "Request Rejected!" });
+        } catch (error) {
+          console.error("/role-requests/reject error:", error);
+          res.status(500).send({ message: "Server Error" });
+        }
+      }
+    );
 
     // GET reviews of logged-in user
     app.get("/user-reviews", verifyJWT, async (req, res) => {
