@@ -74,6 +74,30 @@ async function run() {
       next();
     };
 
+    // VERIFY CHEF ONLY
+    const verifyChef = async (req, res, next) => {
+      try {
+        const email = req.tokenEmail;
+
+        // Find the user from DB
+        const user = await userColl.findOne({ email });
+
+        if (!user) {
+          return res.status(404).send({ message: "User not found!" });
+        }
+
+        // Only chefs OR admins are allowed (optional: remove admin if not needed)
+        if (user.role !== "chef" && user.role !== "admin") {
+          return res.status(403).send({ message: "Access denied! Chef only." });
+        }
+
+        next();
+      } catch (err) {
+        console.error("verifyChef error:", err);
+        res.status(500).send({ message: "Server error in verifyChef" });
+      }
+    };
+
     // CREATE USER (PROTECTED)
     app.post("/users", verifyJWT, async (req, res) => {
       try {
@@ -118,7 +142,7 @@ async function run() {
     );
 
     // CREATE MEAL and fraud chef can't meal (PROTECTED)
-    app.post("/meals", verifyJWT, async (req, res) => {
+    app.post("/meals", verifyJWT, verifyJWT, async (req, res) => {
       const user = await userColl.findOne({ email: req.tokenEmail });
 
       // FRAUD CHEF BLOCK
@@ -333,7 +357,7 @@ async function run() {
     });
 
     // CREATE ROLE REQUEST (Protected)
-    app.post("/role-requests", verifyJWT, verifyAdmin, async (req, res) => {
+    app.post("/role-requests", verifyJWT, async (req, res) => {
       try {
         const body = req.body;
         delete body._id;
@@ -366,7 +390,7 @@ async function run() {
     });
 
     // GET ALL ROLE REQUESTS — (Admin only)
-    app.get("/role-requests", verifyJWT, async (req, res) => {
+    app.get("/role-requests", verifyJWT, verifyAdmin, async (req, res) => {
       try {
         const requests = await roleRequestColl.find().toArray();
         res.send(requests);
@@ -563,7 +587,7 @@ async function run() {
     });
 
     // get all order request
-    app.get("/order-requests", async (req, res) => {
+    app.get("/order-requests", verifyJWT, verifyChef, async (req, res) => {
       try {
         const result = await orderRequestsCollection.find().toArray();
         res.send(result);
