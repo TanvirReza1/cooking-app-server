@@ -103,9 +103,13 @@ async function run() {
         if (!meal)
           return res.status(400).send({ message: "Meal body required" });
 
-        if (meal.userEmail !== req.tokenEmail)
-          return res.status(403).send({ message: "Forbidden!" });
+        // ✔ CHECK CHEF IDENTITY (IMPORTANT)
+        if (meal.chefEmail !== req.tokenEmail)
+          return res
+            .status(403)
+            .send({ message: "Forbidden! Only the chef can create a meal." });
 
+        // Ensure createdAt exists
         meal.createdAt = meal.createdAt ? new Date(meal.createdAt) : new Date();
 
         const result = await mealsColl.insertOne(meal);
@@ -272,26 +276,17 @@ async function run() {
         res.status(500).send({ message: "Failed to create order", error: err });
       }
     });
-
-    // GET all orders for logged-in user
-    app.get("/orders", verifyJWT, async (req, res) => {
+    // GET ORDERS BY USER EMAIL
+    app.get("/orders", async (req, res) => {
       try {
         const email = req.query.email;
-
         if (!email) {
-          return res.status(400).send({ message: "email is required" });
-        }
-
-        // users can only view their own orders
-        if (email !== req.tokenEmail) {
-          return res.status(403).send({ message: "Forbidden!" });
+          return res.status(400).send({ message: "Email query required" });
         }
 
         const orders = await ordersCollection
           .find({ userEmail: email })
-          .sort({ orderTime: -1 })
           .toArray();
-
         res.send(orders);
       } catch (err) {
         console.error("/orders GET error:", err);
@@ -500,6 +495,35 @@ async function run() {
         res.send(result);
       } catch (error) {
         console.error("/order-requests/:id PATCH error:", error);
+        res.status(500).send({ message: "Server Error" });
+      }
+    });
+
+    // GET ALL ORDERS FOR A CHEF BY EMAIL
+    app.get("/orders/chef/:email", async (req, res) => {
+      const email = req.params.email;
+
+      const result = await ordersCollection
+        .find({ chefEmail: email })
+        .toArray();
+
+      res.send(result);
+    });
+
+    // UPDATE ORDER STATUS (pending → accepted → delivered → cancelled)
+    app.patch("/orders/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const { orderStatus } = req.body;
+
+        const result = await ordersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { orderStatus } }
+        );
+
+        res.send(result);
+      } catch (error) {
+        console.error("/orders/:id PATCH error:", error);
         res.status(500).send({ message: "Server Error" });
       }
     });
