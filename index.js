@@ -106,54 +106,40 @@ async function run() {
     });
 
     // GET all users (Admin Only)
-    app.get("/users", verifyToken, verifyAdmin, async (req, res) => {
+    app.get("/users", verifyJWT, verifyAdmin, async (req, res) => {
       const users = await userColl.find().toArray();
       res.send(users);
     });
 
     // make fraud
-    app.patch(
-      "/users/fraud/:id",
-      verifyToken,
-      verifyAdmin,
-      async (req, res) => {
-        const id = req.params.id;
+    app.patch("/users/fraud/:id", verifyJWT, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
 
-        const result = await userColl.updateOne(
-          { _id: new ObjectId(id) },
-          {
-            $set: {
-              status: "fraud",
-            },
-          }
-        );
+      const result = await userColl.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { status: "fraud" } }
+      );
 
-        res.send(result);
-      }
-    );
+      res.send({ success: true, result });
+    });
 
-    // CREATE MEAL (PROTECTED)
+    // CREATE MEAL and fraud chef can't meal (PROTECTED)
     app.post("/meals", verifyJWT, async (req, res) => {
-      try {
-        const meal = req.body;
-        if (!meal)
-          return res.status(400).send({ message: "Meal body required" });
+      const user = await userColl.findOne({ email: req.tokenEmail });
 
-        // ✔ CHECK CHEF IDENTITY (IMPORTANT)
-        if (meal.chefEmail !== req.tokenEmail)
-          return res
-            .status(403)
-            .send({ message: "Forbidden! Only the chef can create a meal." });
-
-        // Ensure createdAt exists
-        meal.createdAt = meal.createdAt ? new Date(meal.createdAt) : new Date();
-
-        const result = await mealsColl.insertOne(meal);
-        res.send(result);
-      } catch (err) {
-        console.error("/meals POST error:", err);
-        res.status(500).send({ message: "Failed to add meal", error: err });
+      // FRAUD CHEF BLOCK
+      if (user.role === "chef" && user.status === "fraud") {
+        return res.status(403).send({
+          message: "Fraud chefs cannot create meals",
+        });
       }
+
+      const meal = req.body;
+
+      meal.createdAt = new Date();
+
+      const result = await mealsColl.insertOne(meal);
+      res.send(result);
     });
 
     // GET ALL MEALS
@@ -294,24 +280,24 @@ async function run() {
       res.send(result);
     });
 
-    // CREATE ORDER (Protected)
+    // BLOCK FRAUD USERS to post orders ( (Protected)
     app.post("/orders", verifyJWT, async (req, res) => {
-      try {
-        const order = req.body;
-        if (!order?.userEmail)
-          return res.status(400).send({ message: "userEmail required" });
+      const user = await userColl.findOne({ email: req.tokenEmail });
 
-        if (order.userEmail !== req.tokenEmail)
-          return res.status(403).send({ message: "Forbidden!" });
-
-        order.orderTime = new Date();
-        const result = await ordersCollection.insertOne(order);
-        res.send(result);
-      } catch (err) {
-        console.error("/orders POST error:", err);
-        res.status(500).send({ message: "Failed to create order", error: err });
+      // FRAUD CUSTOMER BLOCK
+      if (user.status === "fraud" && user.role === "user") {
+        return res.status(403).send({
+          message: "Fraud users cannot place orders",
+        });
       }
+
+      const order = req.body;
+      order.orderTime = new Date();
+
+      const result = await ordersCollection.insertOne(order);
+      res.send(result);
     });
+
     // GET ORDERS BY USER EMAIL
     app.get("/orders", async (req, res) => {
       try {
