@@ -42,6 +42,15 @@ const verifyJWT = async (req, res, next) => {
   }
 };
 
+// verify admin
+const verifyAdmin = async (req, res, next) => {
+  const user = await userColl.findOne({ email: req.tokenEmail });
+  if (!user || user.role !== "admin") {
+    return res.status(403).send({ message: "Admin only!" });
+  }
+  next();
+};
+
 // Mongo client
 const client = new MongoClient(process.env.MONGODB_URI, {
   serverApi: {
@@ -95,6 +104,33 @@ async function run() {
         res.status(500).send({ message: "Failed to fetch users", error: err });
       }
     });
+
+    // GET all users (Admin Only)
+    app.get("/users", verifyToken, verifyAdmin, async (req, res) => {
+      const users = await userColl.find().toArray();
+      res.send(users);
+    });
+
+    // make fraud
+    app.patch(
+      "/users/fraud/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+
+        const result = await userColl.updateOne(
+          { _id: new ObjectId(id) },
+          {
+            $set: {
+              status: "fraud",
+            },
+          }
+        );
+
+        res.send(result);
+      }
+    );
 
     // CREATE MEAL (PROTECTED)
     app.post("/meals", verifyJWT, async (req, res) => {
