@@ -42,15 +42,6 @@ const verifyJWT = async (req, res, next) => {
   }
 };
 
-// verify admin
-const verifyAdmin = async (req, res, next) => {
-  const user = await userColl.findOne({ email: req.tokenEmail });
-  if (!user || user.role !== "admin") {
-    return res.status(403).send({ message: "Admin only!" });
-  }
-  next();
-};
-
 // Mongo client
 const client = new MongoClient(process.env.MONGODB_URI, {
   serverApi: {
@@ -74,6 +65,15 @@ async function run() {
     const roleRequestColl = db.collection("roleRequests");
     const orderRequestsCollection = db.collection("orderRequests");
 
+    // verify admin
+    const verifyAdmin = async (req, res, next) => {
+      const user = await userColl.findOne({ email: req.tokenEmail });
+      if (!user || user.role !== "admin") {
+        return res.status(403).send({ message: "Admin only!" });
+      }
+      next();
+    };
+
     // CREATE USER (PROTECTED)
     app.post("/users", verifyJWT, async (req, res) => {
       try {
@@ -94,17 +94,6 @@ async function run() {
       }
     });
 
-    // GET all users (public/admin)
-    app.get("/users", async (req, res) => {
-      try {
-        const result = await userColl.find().toArray();
-        res.send(result);
-      } catch (err) {
-        console.error("/users GET error:", err);
-        res.status(500).send({ message: "Failed to fetch users", error: err });
-      }
-    });
-
     // GET all users (Admin Only)
     app.get("/users", verifyJWT, verifyAdmin, async (req, res) => {
       const users = await userColl.find().toArray();
@@ -112,16 +101,21 @@ async function run() {
     });
 
     // make fraud
-    app.patch("/users/fraud/:id", verifyJWT, verifyAdmin, async (req, res) => {
-      const id = req.params.id;
+    app.patch(
+      "/users/make-fraud/:email",
+      verifyJWT,
+      verifyAdmin,
+      async (req, res) => {
+        const email = req.params.email;
 
-      const result = await userColl.updateOne(
-        { _id: new ObjectId(id) },
-        { $set: { status: "fraud" } }
-      );
+        const result = await userColl.updateOne(
+          { email },
+          { $set: { status: "fraud" } }
+        );
 
-      res.send({ success: true, result });
-    });
+        res.send({ success: true, result });
+      }
+    );
 
     // CREATE MEAL and fraud chef can't meal (PROTECTED)
     app.post("/meals", verifyJWT, async (req, res) => {
