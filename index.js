@@ -146,7 +146,7 @@ async function run() {
     );
 
     // CREATE MEAL and fraud chef can't meal (PROTECTED)
-    app.post("/meals", verifyJWT, verifyJWT, async (req, res) => {
+    app.post("/meals", verifyJWT, verifyChef, async (req, res) => {
       const user = await userColl.findOne({ email: req.tokenEmail });
 
       // FRAUD CHEF BLOCK
@@ -316,7 +316,8 @@ async function run() {
 
       order.orderTime = new Date();
       order.orderStatus = "pending"; // ✅ default status
-      order.paymentStatus = "pending"; // ✅ REQUIRED for Pay Now button
+      order.paymentStatus = "pending";
+      order.createdAt = new Date(); // ✅ REQUIRED for Pay Now button
 
       const result = await ordersCollection.insertOne(order);
       res.send(result);
@@ -605,7 +606,7 @@ async function run() {
     app.post("/order-requests", async (req, res) => {
       try {
         const orderData = req.body;
-
+        orderData.createdAt = new Date();
         const result = await orderRequestsCollection.insertOne(orderData);
         res.send(result);
       } catch (error) {
@@ -644,18 +645,23 @@ async function run() {
     });
 
     // GET ALL ORDERS FOR A CHEF BY EMAIL
-    app.get("/orders/chef/:email", async (req, res) => {
-      const email = req.params.email;
+    app.get(
+      "/orders/chef/:email",
+      verifyAdmin,
+      verifyChef,
+      async (req, res) => {
+        const email = req.params.email;
 
-      const result = await ordersCollection
-        .find({ chefEmail: email })
-        .toArray();
+        const result = await ordersCollection
+          .find({ chefEmail: email })
+          .toArray();
 
-      res.send(result);
-    });
+        res.send(result);
+      }
+    );
 
     // UPDATE ORDER STATUS (pending → accepted → delivered → cancelled)
-    app.patch("/orders/:id", async (req, res) => {
+    app.patch("/orders/:id", verifyJWT, verifyChef, async (req, res) => {
       try {
         const id = req.params.id;
         const { orderStatus } = req.body;
@@ -690,7 +696,8 @@ async function run() {
           },
         ],
         mode: "payment",
-        success_url: `${process.env.CLIENT_URL}/payment-success/${orderId}`,
+        success_url: `${process.env.CLIENT_URL}/payment-success/${orderId}?status=paid&session_id={CHECKOUT_SESSION_ID}`,
+
         cancel_url: `${process.env.CLIENT_URL}/payment-cancel`,
       });
 
@@ -714,21 +721,45 @@ async function run() {
       res.send({ success: true });
     });
 
-    app.get("/payments/:orderId", async (req, res) => {
+    app.get("/payments/:id", async (req, res) => {
       try {
-        const orderId = req.params.orderId;
+        const id = req.params.id;
 
-        const payment = await paymentCollection.findOne({ orderId });
+        // Find by orderId, NOT _id
+        const payment = await paymentCollection.findOne({ orderId: id });
 
         if (!payment) {
           return res.status(404).send({ message: "Payment not found" });
         }
 
         res.send(payment);
-      } catch (err) {
-        console.error("/payments/:orderId GET error:", err);
-        res.status(500).send({ message: "Server Error" });
+      } catch (error) {
+        res.status(500).send({ message: "Server error", error });
       }
+    });
+
+    app.get("/admin/statistics", verifyJWT, verifyAdmin, async (req, res) => {
+      const totalUsers = await userColl.countDocuments();
+
+      const orders = await ordersCollection.find().toArray();
+
+      const totalPaymentAmount = orders
+        .filter((o) => o.paymentStatus === "paid")
+        .reduce((sum, o) => sum + o.price * o.quantity, 0);
+
+      const ordersPending = orders.filter(
+        (o) => o.orderStatus === "pending"
+      ).length;
+      const ordersDelivered = orders.filter(
+        (o) => o.orderStatus === "delivered"
+      ).length;
+
+      res.send({
+        totalUsers,
+        totalPaymentAmount,
+        ordersPending,
+        ordersDelivered,
+      });
     });
 
     // Ping to confirm DB connection
