@@ -626,6 +626,22 @@ async function run() {
       }
     });
 
+    // get order request by email
+    app.get("/orders/chef/:email", verifyJWT, verifyChef, async (req, res) => {
+      try {
+        const email = req.params.email;
+
+        const orders = await ordersCollection
+          .find({ chefEmail: email })
+          .toArray();
+
+        res.send(orders);
+      } catch (error) {
+        console.error("/orders/chef error:", error);
+        res.status(500).send({ message: "Server Error" });
+      }
+    });
+
     // update payment status
     app.patch("/order-requests/:id", async (req, res) => {
       try {
