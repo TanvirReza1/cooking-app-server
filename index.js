@@ -1,4 +1,7 @@
 require("dotenv").config();
+const Stripe = require("stripe");
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+
 const express = require("express");
 const cors = require("cors");
 const { ObjectId, MongoClient, ServerApiVersion } = require("mongodb");
@@ -64,6 +67,7 @@ async function run() {
     const ordersCollection = db.collection("orders");
     const roleRequestColl = db.collection("roleRequests");
     const orderRequestsCollection = db.collection("orderRequests");
+    const paymentCollection = db.collection("payments");
 
     // verify admin
     const verifyAdmin = async (req, res, next) => {
@@ -333,6 +337,28 @@ async function run() {
       } catch (err) {
         console.error("/orders GET error:", err);
         res.status(500).send({ message: "Failed to fetch orders" });
+      }
+    });
+
+    // get a single order
+    app.get("/orders/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({ message: "Invalid order id" });
+        }
+
+        const order = await ordersCollection.findOne({ _id: new ObjectId(id) });
+
+        if (!order) {
+          return res.status(404).send({ message: "Order not found" });
+        }
+
+        res.send(order);
+      } catch (err) {
+        console.error("/orders/:id GET error:", err);
+        res.status(500).send({ message: "Server Error" });
       }
     });
 
@@ -686,6 +712,23 @@ async function run() {
       });
 
       res.send({ success: true });
+    });
+
+    app.get("/payments/:orderId", async (req, res) => {
+      try {
+        const orderId = req.params.orderId;
+
+        const payment = await paymentCollection.findOne({ orderId });
+
+        if (!payment) {
+          return res.status(404).send({ message: "Payment not found" });
+        }
+
+        res.send(payment);
+      } catch (err) {
+        console.error("/payments/:orderId GET error:", err);
+        res.status(500).send({ message: "Server Error" });
+      }
     });
 
     // Ping to confirm DB connection
