@@ -302,15 +302,17 @@ async function run() {
     app.post("/orders", verifyJWT, async (req, res) => {
       const user = await userColl.findOne({ email: req.tokenEmail });
 
-      // FRAUD CUSTOMER BLOCK
       if (user.status === "fraud" && user.role === "user") {
-        return res.status(403).send({
-          message: "Fraud users cannot place orders",
-        });
+        return res
+          .status(403)
+          .send({ message: "Fraud users cannot place orders" });
       }
 
       const order = req.body;
+
       order.orderTime = new Date();
+      order.orderStatus = "pending"; // ✅ default status
+      order.paymentStatus = "pending"; // ✅ REQUIRED for Pay Now button
 
       const result = await ordersCollection.insertOne(order);
       res.send(result);
@@ -642,6 +644,48 @@ async function run() {
         console.error("/orders/:id PATCH error:", error);
         res.status(500).send({ message: "Server Error" });
       }
+    });
+
+    app.post("/create-payment-intent", verifyJWT, async (req, res) => {
+      const { price, orderId } = req.body;
+
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        line_items: [
+          {
+            price_data: {
+              currency: "usd",
+              product_data: {
+                name: "Meal Payment",
+              },
+              unit_amount: price * 100,
+            },
+            quantity: 1,
+          },
+        ],
+        mode: "payment",
+        success_url: `${process.env.CLIENT_URL}/payment-success/${orderId}`,
+        cancel_url: `${process.env.CLIENT_URL}/payment-cancel`,
+      });
+
+      res.send({ paymentUrl: session.url });
+    });
+
+    app.post("/payment-success", async (req, res) => {
+      const { orderId, paymentInfo } = req.body;
+
+      await ordersCollection.updateOne(
+        { _id: new ObjectId(orderId) },
+        { $set: { paymentStatus: "paid" } }
+      );
+
+      await paymentCollection.insertOne({
+        orderId,
+        paymentInfo,
+        time: new Date(),
+      });
+
+      res.send({ success: true });
     });
 
     // Ping to confirm DB connection
