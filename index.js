@@ -164,14 +164,26 @@ async function run() {
       res.send(result);
     });
 
-    // GET ALL MEALS
+    // GET ALL MEALS WITH PAGINATION
     app.get("/meals", async (req, res) => {
       try {
-        const meals = await mealsColl.find().toArray();
-        res.send(meals);
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+
+        const skip = (page - 1) * limit;
+
+        const totalMeals = await mealsColl.countDocuments();
+        const meals = await mealsColl.find().skip(skip).limit(limit).toArray();
+
+        res.send({
+          meals,
+          totalMeals,
+          totalPages: Math.ceil(totalMeals / limit),
+          currentPage: page,
+        });
       } catch (err) {
         console.error("/meals GET error:", err);
-        res.status(500).send({ message: "Failed to fetch meals", error: err });
+        res.status(500).send({ message: "Failed to fetch meals" });
       }
     });
 
