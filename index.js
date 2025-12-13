@@ -421,7 +421,10 @@ async function run() {
     // GET ALL ROLE REQUESTS — (Admin only)
     app.get("/role-requests", verifyJWT, verifyAdmin, async (req, res) => {
       try {
-        const requests = await roleRequestColl.find().toArray();
+        const requests = await roleRequestColl
+          .find()
+          .sort({ requestTime: -1 })
+          .toArray();
         res.send(requests);
       } catch (err) {
         console.error("/role-requests GET error:", err);
@@ -660,22 +663,6 @@ async function run() {
       }
     });
 
-    // GET ALL ORDERS FOR A CHEF BY EMAIL
-    app.get(
-      "/orders/chef/:email",
-      verifyAdmin,
-      verifyChef,
-      async (req, res) => {
-        const email = req.params.email;
-
-        const result = await ordersCollection
-          .find({ chefEmail: email })
-          .toArray();
-
-        res.send(result);
-      }
-    );
-
     // UPDATE ORDER STATUS (pending → accepted → delivered → cancelled)
     app.patch("/orders/:id", verifyJWT, verifyChef, async (req, res) => {
       try {
@@ -694,6 +681,38 @@ async function run() {
       }
     });
 
+    // GET all meals for this chef
+    app.get("/meals/chef/:email", verifyJWT, verifyChef, async (req, res) => {
+      const email = req.params.email;
+      const meals = await mealsColl.find({ chefEmail: email }).toArray();
+      res.send(meals);
+    });
+
+    // DELETE meal
+    app.delete("/meals/:id", verifyJWT, verifyChef, async (req, res) => {
+      const id = req.params.id;
+      const result = await mealsColl.deleteOne({ _id: new ObjectId(id) });
+      res.send(result);
+    });
+
+    // PATCH update meal
+    app.patch("/meals/:id", verifyJWT, verifyChef, async (req, res) => {
+      const id = req.params.id;
+      const updatedMeal = req.body;
+
+      const updateDoc = {
+        $set: updatedMeal,
+      };
+
+      const result = await mealsColl.updateOne(
+        { _id: new ObjectId(id) },
+        updateDoc
+      );
+
+      res.send(result);
+    });
+
+    // payment releated api
     app.post("/create-payment-intent", verifyJWT, async (req, res) => {
       const { price, orderId } = req.body;
 
