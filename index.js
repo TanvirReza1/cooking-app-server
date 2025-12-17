@@ -135,7 +135,7 @@ async function run() {
 
     // GET all users (Admin Only)
     app.get("/users", verifyJWT, verifyAdmin, async (req, res) => {
-      const users = await userColl.find().toArray();
+      const users = await userColl.find().sort({ _id: -1 }).toArray();
       res.send(users);
     });
 
@@ -233,7 +233,7 @@ async function run() {
 
     // GET reviews for a specific meal (public)
     // Expect frontend to send mealId as string (e.g. meal._id.toString())
-    app.get("/reviews/:mealId", async (req, res) => {
+    app.get("/reviews/:mealId", verifyJWT, async (req, res) => {
       try {
         const mealId = req.params.mealId;
         const reviews = await reviewsCollection
@@ -311,7 +311,7 @@ async function run() {
 
     // GET USER'S FAVORITES (Protected)
     // call: GET /favorites?email=user@example.com
-    app.get("/favorites/:email", async (req, res) => {
+    app.get("/favorites/:email", verifyJWT, async (req, res) => {
       const result = await favoritesCollection
         .find({ userEmail: req.params.email })
         .toArray();
@@ -630,7 +630,7 @@ async function run() {
     });
 
     // order request
-    app.post("/order-requests", async (req, res) => {
+    app.post("/order-requests", verifyJWT, async (req, res) => {
       try {
         const orderData = req.body;
         orderData.createdAt = new Date();
@@ -663,6 +663,7 @@ async function run() {
 
         const orders = await ordersCollection
           .find({ chefEmail: email })
+          .sort({ createdAt: -1 })
           .toArray();
 
         res.send(orders);
