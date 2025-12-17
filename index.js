@@ -18,7 +18,15 @@ admin.initializeApp({
 });
 
 const app = express();
-app.use(cors());
+app.use(
+  cors({
+    origin: ["http://localhost:5173", "beautiful-youtiao-613324.netlify.app"],
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  })
+);
+
 app.use(express.json());
 
 // SAFE auth header parsing
@@ -345,6 +353,7 @@ async function run() {
 
         const orders = await ordersCollection
           .find({ userEmail: email })
+          .sort({ createdAt: -1 })
           .toArray();
         res.send(orders);
       } catch (err) {

@@ -1,3 +1,4 @@
 node_modules
 .env
 cooking-app-firebase-adminsdk.json
+.vercel
