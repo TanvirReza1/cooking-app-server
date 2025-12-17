@@ -68,7 +68,6 @@ const client = new MongoClient(process.env.MONGODB_URI, {
 async function run() {
   try {
     // connect once
-    await client.connect();
 
     const db = client.db("cook-db");
     const userColl = db.collection("users");
@@ -163,7 +162,8 @@ async function run() {
       // FRAUD CHEF BLOCK
       if (user.role === "chef" && user.status === "fraud") {
         return res.status(403).send({
-          message: "Fraud chefs cannot create meals",
+          errorType: "FRAUD_USER",
+          message: "You are marked as fraud. You cannot create meals.",
         });
       }
 
@@ -826,7 +826,7 @@ async function run() {
     });
 
     // Ping to confirm DB connection
-    await client.db("admin").command({ ping: 1 });
+
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
