@@ -645,7 +645,10 @@ async function run() {
     // get all order request
     app.get("/order-requests", verifyJWT, verifyChef, async (req, res) => {
       try {
-        const result = await orderRequestsCollection.find().toArray();
+        const result = await orderRequestsCollection
+          .find()
+          .sort({ createdAt: -1 })
+          .toArray();
         res.send(result);
       } catch (error) {
         console.error("/order-requests GET error:", error);
