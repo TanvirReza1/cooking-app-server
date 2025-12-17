@@ -20,10 +20,13 @@ admin.initializeApp({
 const app = express();
 app.use(
   cors({
-    origin: ["http://localhost:5173", "beautiful-youtiao-613324.netlify.app"],
-    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    origin: [
+      process.env.CLIENT_URL,
+      "http://localhost:5173",
+      "http://localhost:5174",
+    ],
     credentials: true,
+    optionSuccessStatus: 200,
   })
 );
 
