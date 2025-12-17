@@ -330,9 +330,10 @@ async function run() {
       const user = await userColl.findOne({ email: req.tokenEmail });
 
       if (user.status === "fraud" && user.role === "user") {
-        return res
-          .status(403)
-          .send({ message: "Fraud users cannot place orders" });
+        return res.status(403).send({
+          errorType: "FRAUD_USER",
+          message: "You are marked as fraud. You cannot place orders.",
+        });
       }
 
       const order = req.body;
