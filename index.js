@@ -175,16 +175,25 @@ async function run() {
       res.send(result);
     });
 
-    // GET ALL MEALS WITH PAGINATION
+    // GET ALL MEALS WITH PAGINATION + GLOBAL SORT
     app.get("/meals", async (req, res) => {
       try {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
 
+        // 🔥 sort = asc | desc (default asc)
+        const sortOrder = req.query.sort === "desc" ? -1 : 1;
+
         const skip = (page - 1) * limit;
 
         const totalMeals = await mealsColl.countDocuments();
-        const meals = await mealsColl.find().skip(skip).limit(limit).toArray();
+
+        const meals = await mealsColl
+          .find()
+          .sort({ price: sortOrder }) // ✅ GLOBAL SORT FIRST
+          .skip(skip) // ✅ THEN PAGINATION
+          .limit(limit)
+          .toArray();
 
         res.send({
           meals,
