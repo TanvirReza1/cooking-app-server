@@ -124,7 +124,15 @@ async function run() {
         const exists = await userColl.findOne({ email: user.email });
         if (exists) return res.send({ message: "User already exists" });
 
-        const result = await userColl.insertOne(user);
+        // ✅ ADD DEFAULT ROLE SAFELY
+        const newUser = {
+          ...user,
+          role: "user", // 👈 default role
+          status: "active", // 👈 optional but recommended
+          createdAt: new Date(),
+        };
+
+        const result = await userColl.insertOne(newUser);
         res.send(result);
       } catch (err) {
         console.error("/users POST error:", err);
@@ -136,6 +144,33 @@ async function run() {
     app.get("/users", verifyJWT, verifyAdmin, async (req, res) => {
       const users = await userColl.find().sort({ _id: -1 }).toArray();
       res.send(users);
+    });
+
+    // update user info
+    app.patch("/users/:email", verifyJWT, async (req, res) => {
+      const email = req.params.email;
+
+      if (req.tokenEmail !== email) {
+        return res.status(403).send({ message: "Forbidden" });
+      }
+
+      const { name, address, image } = req.body;
+
+      const result = await userColl.updateOne(
+        { email },
+        {
+          $set: { name, address, image },
+          $setOnInsert: {
+            email,
+            role: "user",
+            status: "active",
+            createdAt: new Date(),
+          },
+        },
+        { upsert: true }
+      );
+
+      res.send(result);
     });
 
     // make fraud
@@ -180,20 +215,49 @@ async function run() {
       try {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
-
-        // 🔥 sort = asc | desc (default asc)
-        const sortOrder = req.query.sort === "desc" ? -1 : 1;
-
         const skip = (page - 1) * limit;
 
-        const totalMeals = await mealsColl.countDocuments();
+        const sortOrder = req.query.sort === "desc" ? -1 : 1;
 
         const meals = await mealsColl
-          .find()
-          .sort({ price: sortOrder }) // ✅ GLOBAL SORT FIRST
-          .skip(skip) // ✅ THEN PAGINATION
-          .limit(limit)
+          .aggregate([
+            // convert _id to string for review matching
+            {
+              $addFields: {
+                mealIdStr: { $toString: "$_id" },
+              },
+            },
+
+            // join reviews
+            {
+              $lookup: {
+                from: "reviews",
+                localField: "mealIdStr",
+                foreignField: "foodId",
+                as: "reviews",
+              },
+            },
+
+            // calculate rating
+            {
+              $addFields: {
+                avgRating: { $ifNull: [{ $avg: "$reviews.rating" }, 0] },
+                totalReviews: { $size: "$reviews" },
+              },
+            },
+
+            // ✅ PRICE SORT (same as before)
+            {
+              $sort: { price: sortOrder },
+            },
+
+            // pagination
+            { $skip: skip },
+            { $limit: limit },
+          ])
           .toArray();
+
+        const totalMeals = await mealsColl.countDocuments();
 
         res.send({
           meals,
